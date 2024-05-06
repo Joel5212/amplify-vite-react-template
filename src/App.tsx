@@ -4,19 +4,48 @@ import { generateClient } from "aws-amplify/data";
 import { Authenticator } from '@aws-amplify/ui-react'
 import '@aws-amplify/ui-react/styles.css'
 
-const client = generateClient<Schema>();
+const client = generateClient<Schema>({
+
+});
 
 function App() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
 
   useEffect(() => {
-    client.models.Todo.observeQuery().subscribe({
-      next: (data) => setTodos([...data.items]),
+    const sub = client.models.Todo.observeQuery().subscribe({
+      next: ({ items }) => {
+        setTodos([...items]);
+      },
     });
+
+    return () => sub.unsubscribe();
   }, []);
 
-  function createTodo() {
-    client.models.Todo.create({ content: window.prompt("Todo content") });
+  const createTodo = async () => {
+    await client.models.Todo.create({
+      content: window.prompt("Todo content?"),
+      isDone: false
+    })
+
+    fetchTodos();
+  }
+
+  const fetchTodos = async () => {
+    const { data: items } = await client.models.Todo.list();
+    setTodos(items);
+  };
+
+
+  async function deleteNote(todo: { id: string }) {
+    const newNotes = todos.filter((todo) => todo.id !== todo.id);
+    setTodos(newNotes);
+
+    try {
+      await client.models.Todo.delete({ id: todo.id });
+    } catch (err) {
+      console.error("Error deleting todo:", err);
+      fetchTodos(); // Re-fetch the list in case of failure to maintain consistency
+    }
   }
 
   return (
@@ -24,10 +53,12 @@ function App() {
       {({ signOut, user }) => (
         <main>
           <h1>{user?.signInDetails?.loginId}'s todos</h1>
-          <button onClick={createTodo}>+ new</button>
+          <button onClick={createTodo}>Add new todo</button>
           <ul>
             {todos.map((todo) => (
-              <li key={todo.id}>{todo.content}</li>
+              <li
+                key={todo.id}>{todo.content}
+                <button onClick={() => deleteNote({ id: todo.id })}>Delete note</button></li>
             ))}
           </ul>
           <div>
